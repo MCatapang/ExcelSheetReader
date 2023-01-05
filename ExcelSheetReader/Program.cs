@@ -5,6 +5,7 @@ using Excel = Microsoft.Office.Interop.Excel;
 using ExcelSheetReader.Helpers;
 using ExcelSheetReader.Settings;
 using System.Diagnostics;
+using System.Text;
 
 namespace ExcelSheetReader
 {
@@ -48,7 +49,7 @@ namespace ExcelSheetReader
 
         private static void QueryGenerator()
         {
-            string finalQuery = string.Empty;
+            StringBuilder queryBuilder = new();
 
             int rowCount = ExcelRange.Rows.Count;
             int colCount = ExcelRange.Columns.Count;
@@ -68,10 +69,10 @@ namespace ExcelSheetReader
                     string.Empty, new string[] { queryIndent, queryStart, queryMiddle, queryEnd, queryTerminator }
                 );
 
-                finalQuery += string.Join("", new string[] { insertQuery, valueQuery });
+                queryBuilder.Append(insertQuery + valueQuery);
             }
 
-            Console.WriteLine(finalQuery);
+            Console.WriteLine(queryBuilder.ToString());
         }
 
 
