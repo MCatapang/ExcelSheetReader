@@ -4,57 +4,58 @@ using System.Runtime.InteropServices;
 using Excel = Microsoft.Office.Interop.Excel;
 using ExcelSheetReader.Helpers;
 using ExcelSheetReader.Settings;
+using System.Diagnostics;
 
 namespace ExcelSheetReader
 {
     public static class Program
     {
-        public static void Main(string[] args)
+        public static Excel.Application ExcelApp { get; private set; }
+        public static Excel.Workbook ExcelWorkbook { get; private set; }
+        public static Excel.Sheets ExcelSheets { get; private set; }
+        public static IEnumerable<Excel.Worksheet> ExcelWorksheets { get; private set; }
+        public static Excel._Worksheet ExcelWorksheet { get; private set; }
+        public static Excel.Range ExcelRange { get; private set; }
+
+        static Program()
         {
             // Create COM Objects. Create a COM object for everything that is referenced
-            Excel.Application ExcelApp = new Excel.Application();
-            Excel.Workbook ExcelWorkbook = ExcelApp.Workbooks.Open(Config.FilePath);
-            Excel._Worksheet ExcelWorksheet = ExcelWorkbook.Sheets
-                .Cast<Excel.Worksheet>()
-                .First(s => s.Name == Config.SheetName);
-            Excel.Range ExcelRange = ExcelWorksheet.UsedRange;
-
-            // Generate and output the SQL query
-            string output = QueryGenerator(ExcelRange);
-            Console.WriteLine(output);
-            
-            // Cleanup
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-
-            // Rule of thumb for releasing com objects:
-            //   never use two dots, all COM objects must be referenced and released individually
-            //   ex: [somthing].[something].[something] is bad
-
-            // Release com objects to fully kill excel process from running in the background
-            Marshal.ReleaseComObject(ExcelRange);
-            Marshal.ReleaseComObject(ExcelWorksheet);
-
-            // Close and release
-            ExcelWorkbook.Close();
-            Marshal.ReleaseComObject(ExcelWorkbook);
-
-            // Quit and release
-            ExcelApp.Quit();
-            Marshal.ReleaseComObject(ExcelApp);
-
+            ExcelApp = new Excel.Application();
+            ExcelWorkbook = ExcelApp.Workbooks.Open(Config.FilePath);
+            ExcelSheets = ExcelWorkbook.Sheets;
+            ExcelWorksheets = ExcelSheets.Cast<Excel.Worksheet>();
+            ExcelWorksheet = ExcelWorksheets.First(s => s.Name == Config.SheetName);
+            ExcelRange = ExcelWorksheet.UsedRange;
         }
 
-        private static string QueryGenerator(Excel.Range xlRange)
+        public static void Main(string[] args)
+        {
+            // Generate and print SQL query to Debug window
+            QueryGenerator();
+
+            // Exit and release processes
+            KillProcesses();
+            Console.WriteLine("Finished killing Excel processes");
+
+            // Trigger Garbage Collector twice
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            Console.WriteLine("Finished collecting garbage the first time.");
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            Console.WriteLine("Finished collecting garbage the second time.");
+        }
+
+        private static void QueryGenerator()
         {
             string finalQuery = string.Empty;
 
-            int rowCount = xlRange.Rows.Count;
-            int colCount = xlRange.Columns.Count;
+            int rowCount = ExcelRange.Rows.Count;
+            int colCount = ExcelRange.Columns.Count;
 
             for (int i = 2; i <= rowCount; i++)
             {
-                List<string> cellValues = RowDataExtractor(i, colCount, xlRange);
+                List<string> cellValues = RowDataExtractor(i, colCount, ExcelRange);
 
                 string queryIndent = "    ";
                 string queryStart = "Values (";
@@ -67,20 +68,20 @@ namespace ExcelSheetReader
                     string.Empty, new string[] { queryIndent, queryStart, queryMiddle, queryEnd, queryTerminator }
                 );
 
-                finalQuery += (insertQuery + valueQuery);
+                finalQuery += string.Join("", new string[] { insertQuery, valueQuery });
             }
 
-            return finalQuery;
+            Console.WriteLine(finalQuery);
         }
 
 
-        private static List<string> RowDataExtractor(int currentRow, int colCount, Excel.Range xlRange)
+        private static List<string> RowDataExtractor(int currentRow, int colCount, Excel.Range ExcelRange)
         {
             List<string> outputList = new();
 
             for (int j = 2; j <= colCount; j++)
             {
-                var colTitle = xlRange.Cells[1, j].Value2;
+                var colTitle = ExcelRange.Cells[1, j].Value2;
 
                 if (string.IsNullOrWhiteSpace(colTitle))
                 {
@@ -88,7 +89,7 @@ namespace ExcelSheetReader
                 }
 
                 string? validVal;
-                var cell = xlRange.Cells[currentRow, j];
+                var cell = ExcelRange.Cells[currentRow, j];
                 var cellVal = cell?.Value2;
 
                 bool cellValIsCode = cell != null
@@ -108,6 +109,28 @@ namespace ExcelSheetReader
         {
             string output = (!cellVal!.Equals("null")) ? $"'{cellVal}'" : "null";
             return output;
+        }
+
+        private static void KillProcesses()
+        {
+            // Rule of thumb for releasing com objects:
+            //   never use two dots, all COM objects must be referenced and released individually
+            //   ex: [somthing].[something].[something] is bad
+
+            // Exit and release processes
+            ExcelWorkbook.Close();
+            ExcelApp.Quit();
+            Marshal.ReleaseComObject(ExcelRange);
+            Marshal.ReleaseComObject(ExcelWorksheet);
+            Marshal.ReleaseComObject(ExcelSheets);
+            Marshal.ReleaseComObject(ExcelWorkbook);
+            Marshal.ReleaseComObject(ExcelApp);
+
+            Process[] prs = Process.GetProcessesByName("Excel");
+            foreach (Process p in prs)
+            {
+                p.Kill();
+            }
         }
     }
 }
