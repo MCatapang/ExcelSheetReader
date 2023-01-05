@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ExcelSheetReader": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
