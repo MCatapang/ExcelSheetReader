@@ -66,7 +66,10 @@ namespace ExcelSheetReader
 
                 string insertQuery = QueryHelper.Queries[Config.SheetName] + queryTerminator;
                 string valueQuery = string.Join(
-                    string.Empty, new string[] { queryIndent, queryStart, queryMiddle, queryEnd, queryTerminator }
+                    string.Empty, 
+                    new string[] { 
+                        queryIndent, queryStart, queryMiddle, queryEnd, queryTerminator 
+                    }
                 );
 
                 queryBuilder.Append(insertQuery + valueQuery);
@@ -98,7 +101,9 @@ namespace ExcelSheetReader
                     && cellVal!.GetType() == typeof(string)
                     && CodeHelper.Codes.ContainsKey(cellVal);
 
-                validVal = cellValIsCode ? $"{CodeHelper.Codes[cellVal]}" : FormatNonCodeData(cellVal ?? "null");
+                validVal = cellValIsCode 
+                    ? $"{CodeHelper.Codes[cellVal]}" 
+                    : FormatNonCodeData(cellVal ?? "null");
 
                 outputList.Add(validVal);
             }
