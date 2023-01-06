@@ -116,7 +116,8 @@ namespace ExcelSheetReader
         private static string FormatNonCodeData<T>(T cellVal)
         {
             // Format null values
-            string output = (!cellVal!.Equals("null")) ? $"'{cellVal}'" : "null";
+            List<string> nullList = new() { "null", "NULL" };
+            string output = (!nullList.Contains($"{cellVal}")) ? $"'{cellVal}'" : "null";
 
             // Format dates
             Regex rgx = new Regex("\\d\\d/\\d\\d/\\d\\d\\d\\d", RegexOptions.IgnoreCase);
