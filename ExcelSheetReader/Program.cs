@@ -6,6 +6,8 @@ using ExcelSheetReader.Helpers;
 using ExcelSheetReader.Settings;
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
+using System.Globalization;
 
 namespace ExcelSheetReader
 {
@@ -113,7 +115,18 @@ namespace ExcelSheetReader
 
         private static string FormatNonCodeData<T>(T cellVal)
         {
+            // Format null values
             string output = (!cellVal!.Equals("null")) ? $"'{cellVal}'" : "null";
+
+            // Format dates
+            Regex rgx = new Regex("\\d\\d/\\d\\d/\\d\\d\\d\\d", RegexOptions.IgnoreCase);
+            if (rgx.IsMatch(output))
+            {
+                Match match = rgx.Match(output);
+                DateTime.TryParse(match.Value + " 00:00:00", out DateTime parsedDate);
+                output = rgx.Replace(output, parsedDate.ToString("yyyy-MM-dd HH-mm-ss"));
+            }
+
             return output;
         }
 
