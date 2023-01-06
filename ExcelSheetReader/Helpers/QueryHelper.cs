@@ -4,7 +4,7 @@
     {
         public static Dictionary<string, string> Queries { get; private set; } = new()
         {
-            { "Student", "INSERT IGNORE INTO Student ( `StudentId`, `StateId`, `Birthdate`, `BirthCity`, `BirthStateCode`, `BirthCountryCode`, `EthnicityCode`, `Initial9thGradeYear`, `CohortYear`, `RecordSourceCode`)" }
+            { "Student", "INSERT IGNORE INTO Student (`StudentRecordId`, `StudentId`, `StateId`, `Birthdate`, `BirthCity`, `BirthStateCode`, `BirthCountryCode`, `EthnicityCode`, `Initial9thGradeYear`, `CohortYear`, `RecordSourceCode`)" }
         };
     }
 }

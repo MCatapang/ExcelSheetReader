@@ -85,7 +85,7 @@ namespace ExcelSheetReader
         {
             List<string> outputList = new();
 
-            for (int j = 2; j <= colCount; j++)
+            for (int j = 1; j <= colCount; j++)
             {
                 var colTitle = ExcelRange.Cells[1, j].Value2;
 
