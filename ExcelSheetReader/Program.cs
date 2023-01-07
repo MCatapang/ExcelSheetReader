@@ -17,8 +17,6 @@ namespace ExcelSheetReader
         public static Excel.Workbook ExcelWorkbook { get; private set; }
         public static Excel.Sheets ExcelSheets { get; private set; }
         public static IEnumerable<Excel.Worksheet> ExcelWorksheets { get; private set; }
-        public static Excel._Worksheet ExcelWorksheet { get; private set; }
-        public static Excel.Range ExcelRange { get; private set; }
 
         static Program()
         {
@@ -27,17 +25,18 @@ namespace ExcelSheetReader
             ExcelWorkbook = ExcelApp.Workbooks.Open(Config.FilePath);
             ExcelSheets = ExcelWorkbook.Sheets;
             ExcelWorksheets = ExcelSheets.Cast<Excel.Worksheet>();
-            ExcelWorksheet = ExcelWorksheets.First(s => s.Name == Config.SheetName);
-            ExcelRange = ExcelWorksheet.UsedRange;
         }
 
         public static void Main(string[] args)
         {
-            // Generate and print SQL query to Debug window
-            QueryGenerator();
-
+            foreach (SheetInfo sheetInfo in Config.WorkBookInfo)
+            {
+                // Generate and print SQL query to Debug window
+                QueryGenerator(sheetInfo);
+            }
+            
             // Exit and release processes
-            KillProcesses();
+            KillAllExcelProcesses();
             Console.WriteLine("Finished killing Excel processes");
 
             // Trigger Garbage Collector twice
@@ -49,16 +48,19 @@ namespace ExcelSheetReader
             Console.WriteLine("Finished collecting garbage the second time.");
         }
 
-        private static void QueryGenerator()
+        private static void QueryGenerator(SheetInfo sheetInfo)
         {
-            StringBuilder queryBuilder = new();
+            StringBuilder queryBuilder = new(); 
+            int startingCol = sheetInfo.IsJunctionTable ? 1 : 2;
 
-            int rowCount = ExcelRange.Rows.Count;
-            int colCount = ExcelRange.Columns.Count;
+            Excel._Worksheet excelWorksheet = ExcelWorksheets.First(s => s.Name == sheetInfo.SheetName);
+            Excel.Range excelRange = excelWorksheet.UsedRange;
+            int rowCount = excelRange.Rows.Count;
+            int colCount = excelRange.Columns.Count;
 
             for (int i = 2; i <= rowCount; i++)
             {
-                List<string> cellValues = RowDataExtractor(i, colCount, ExcelRange);
+                List<string> cellValues = RowDataExtractor(excelRange, i, colCount, startingCol);
 
                 string queryIndent = "    ";
                 string queryStart = "Values (";
@@ -66,26 +68,40 @@ namespace ExcelSheetReader
                 string queryEnd = ");";
                 string queryTerminator = "\r\n";
 
-                string insertQuery = QueryHelper.Queries[Config.SheetName] + queryTerminator;
-                string valueQuery = string.Join(
-                    string.Empty, 
-                    new string[] { 
-                        queryIndent, queryStart, queryMiddle, queryEnd, queryTerminator 
-                    }
-                );
+                List<string> valueQueryList = new()
+                {
+                    queryIndent, queryStart, queryMiddle, queryEnd, queryTerminator
+                };
+                List<string> setVarQueryList = new()
+                {
+                    queryIndent,
+                    QueryHelper.GenerateQuery_SetTemporaryVariableToLastInsertId(
+                        sheetInfo.TempVarName, i-1
+                    ),
+                    queryTerminator
+                };
 
-                queryBuilder.Append(insertQuery + valueQuery);
+                string insertQuery = QueryHelper.Queries[excelWorksheet.Name] + queryTerminator;
+                string valueQuery = string.Join(string.Empty, valueQueryList);
+                string setVarQuery = sheetInfo.IsJunctionTable
+                    ? string.Empty
+                    : string.Join(string.Empty, setVarQueryList);
+
+                queryBuilder.Append(insertQuery + valueQuery + setVarQuery);
             }
 
+            ReleaseComObjects(ref excelRange, ref excelWorksheet);
             Console.WriteLine(queryBuilder.ToString());
         }
 
 
-        private static List<string> RowDataExtractor(int currentRow, int colCount, Excel.Range ExcelRange)
+        private static List<string> RowDataExtractor(
+            Excel.Range ExcelRange, int currentRow, int colCount, int startingCol
+        )
         {
             List<string> outputList = new();
 
-            for (int j = 1; j <= colCount; j++)
+            for (int j = startingCol; j <= colCount; j++)
             {
                 var colTitle = ExcelRange.Cells[1, j].Value2;
 
@@ -119,6 +135,9 @@ namespace ExcelSheetReader
             List<string> nullList = new() { "null", "NULL" };
             string output = (!nullList.Contains($"{cellVal}")) ? $"'{cellVal}'" : "null";
 
+            bool cellValIsTempVarVal = output.Contains("'@");
+            output = cellValIsTempVarVal ? output.Trim('\'') : output;
+
             // Format dates
             Regex rgx = new Regex("\\d\\d/\\d\\d/\\d\\d\\d\\d", RegexOptions.IgnoreCase);
             if (rgx.IsMatch(output))
@@ -131,17 +150,24 @@ namespace ExcelSheetReader
             return output;
         }
 
-        private static void KillProcesses()
+        private static void ReleaseComObjects(
+            ref Excel.Range excelRange, ref Excel._Worksheet excelWorksheet
+        )
+        {
+            // Release range and worksheet objects to free up resources for the next sheet
+            Marshal.ReleaseComObject(excelRange);
+            Marshal.ReleaseComObject(excelWorksheet);
+        }
+
+        private static void KillAllExcelProcesses()
         {
             // Rule of thumb for releasing com objects:
             //   never use two dots, all COM objects must be referenced and released individually
             //   ex: [somthing].[something].[something] is bad
 
-            // Exit and release processes
+            // Exit and release remaining processes
             ExcelWorkbook.Close();
             ExcelApp.Quit();
-            Marshal.ReleaseComObject(ExcelRange);
-            Marshal.ReleaseComObject(ExcelWorksheet);
             Marshal.ReleaseComObject(ExcelSheets);
             Marshal.ReleaseComObject(ExcelWorkbook);
             Marshal.ReleaseComObject(ExcelApp);
